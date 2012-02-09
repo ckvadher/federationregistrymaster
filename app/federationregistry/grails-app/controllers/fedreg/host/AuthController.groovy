@@ -121,17 +121,14 @@ class AuthController {
 			}
 			
 			if(incomplete) {
-				log.info "Incomplete shibboleth based authentication attempt with the following details: $uniqueID, $givenName, $surname, $email, $entityID, $homeOrganization, $homeOrganizationType was aborted"
+				log.info "Incomplete shibboleth based authentication attempt with the following details: $uniqueID, $displayName, $givenName, $surname, $email, $entityID, $homeOrganization, $homeOrganizationType was aborted"
 				render (view:"shibincomplete", model:[errors:errors])
 				return
 			}
 			
-			
-			log.debug "Attempting shibboleth based authentication with the following details: $uniqueID, $givenName, $surname, $email, $entityID, $homeOrganization, $homeOrganizationType"
-			
 			try {
-				def authToken = new ShibbolethToken(principal:uniqueID, givenName:givenName, surname:surname, email:email, entityID:entityID, homeOrganization:homeOrganization, homeOrganizationType:homeOrganizationType)
-				log.info "Attempting to establish session for user based on Shibboleth authentication with the following details: $uniqueID, $givenName, $surname, $email, $entityID" 
+				def authToken = new ShibbolethToken(principal:uniqueID, displayName:displayName, givenName:givenName, surname:surname, email:email, entityID:entityID, homeOrganization:homeOrganization, homeOrganizationType:homeOrganizationType)
+				log.info "Attempting to establish session for user based on Shibboleth authentication with the following details: $uniqueID, $displayName, $givenName, $surname, $email, $entityID" 
 				
 				SecurityUtils.subject.login(authToken)
 		        this.userService.createLoginRecord(request)
