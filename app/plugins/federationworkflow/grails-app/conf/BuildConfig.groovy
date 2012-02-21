@@ -28,24 +28,15 @@ grails.project.dependency.resolution = {
         //mavenRepo "http://repository.jboss.com/maven2/"
     }
     dependencies {
-        // specify dependencies here under either 'build', 'compile', 'runtime', 'test' or 'provided' scopes eg.
-
-        // runtime 'mysql:mysql-connector-java:5.1.5'
+        test 'com.mysql:mysql-connector-java:5.1.5'
     }
 
 }
 
-//cobertura exclusions
-coverage {
-	exclusions = [
-	              '**/grails/plugin/spock/**',
-	              '**/grails/plugins/nimble/**',
-	              '**/org/apache/**',
-	              '**/org/grails/**',
-	              '**/junit/framework/**',
-	              '**/*Config*',
-	              '**/*Shiro*',
-	              '**/*Nimble*',
-				  '**/greenmail/**'
-				  ]
+
+codenarc.reports = {
+    HTMLReport('html') {
+        outputFile = 'target/test-reports/codenarc.html' 
+        title = 'CodeNarc' 
+    } 
 }

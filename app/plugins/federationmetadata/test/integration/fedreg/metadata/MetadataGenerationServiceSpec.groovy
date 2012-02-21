@@ -72,6 +72,10 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		new File('./test/data/selfsigned.pem').text
 	}
 
+    def String loadPK2() {
+        new File('./test/data/selfsigned2.pem').text
+    }
+
 	def "Test valid endpoint generation"() {
 		setup:
 		setupBindings()
@@ -261,6 +265,24 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		def xml = writer.toString()
 		xml == expected
 	}
+
+    def "Test valid contact person generation with non SAML type"() {
+        setup:
+        def email = MailURI.build(uri:"test@example.com")
+        def home = TelNumURI.build(uri:"(07) 1111 1111")
+        def work = TelNumURI.build(uri:"(567) 222 22222")
+        def contact = Contact.build(givenName:"Test", surname:"User", email:email, homePhone:home, workPhone:work)
+        def admin = ContactType.build(name:"businessowner")
+        def contactPerson = ContactPerson.build(contact:contact, type:admin)
+        def expected = loadExpected('testvalidcontactnonsaml')
+        
+        when:
+        metadataGenerationService.contactPerson(builder, contactPerson)
+        
+        then:
+        def xml = writer.toString()
+        xml == expected
+    }
 	
 	def "Test valid contact person generation with only mobile phone"() {
 		setup:
@@ -303,7 +325,7 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		
 		def keyInfo = new CAKeyInfo(certificate:new CACertificate(data:loadPK()))
 		def certificate2 = Certificate.build(data:loadPK())
-		def keyInfo2 = new CAKeyInfo(certificate:new CACertificate(data:loadPK()))
+		def keyInfo2 = new CAKeyInfo(certificate:new CACertificate(data:loadPK2()))
 		def certificateAuthorities = []
 		certificateAuthorities.add(keyInfo)
 		certificateAuthorities.add(keyInfo2)
@@ -321,7 +343,7 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		similarExcludingID(diff)
 	}
 	
-	def "Test valid EntitiesDescriptor generation with embedded entitiesdescriptors"() {
+	def "Test valid EntitiesDescriptor generation with embedded entitiesdescriptors and no CA"() {
 		setup:
 		def organization = Organization.build(active:true, approved:true, name:"Test Organization", displayName:"Test Organization Display", lang:"en", url: new UrlURI(uri:"http://example.com"))
 		def email = MailURI.build(uri:"test@example.com")
@@ -345,12 +367,7 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 			entitiesDescriptor1.addToEntityDescriptors(entityDescriptor)
 		}
 		
-		def keyInfo = new CAKeyInfo(certificate:new CACertificate(data:loadPK()))
-		def certificate2 = Certificate.build(data:loadPK())
-		def keyInfo2 = new CAKeyInfo(certificate:new CACertificate(data:loadPK()))
 		def certificateAuthorities = []
-		certificateAuthorities.add(keyInfo)
-		certificateAuthorities.add(keyInfo2)
 		
 		def validUntil = new GregorianCalendar(2009, Calendar.JULY, 22)
 			
@@ -482,9 +499,13 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		def encryptionMethod = EncryptionMethod.build(algorithm:"http://www.w3.org/2001/04/xmlenc#tripledes-cbc")
 		def keyDescriptor = KeyDescriptor.build(keyInfo:keyInfo, encryptionMethod:encryptionMethod, keyType:KeyTypes.encryption)
 		
-		def certificate2 = Certificate.build(data:loadPK())
-		def keyInfo2 = KeyInfo.build(keyName:"key2", certificate:certificate)
+		def certificate2 = Certificate.build(data:loadPK2())
+		def keyInfo2 = KeyInfo.build(certificate:certificate2)
 		def keyDescriptor2 = KeyDescriptor.build(keyInfo:keyInfo2, keyType:KeyTypes.signing)
+
+        def certificate3 = Certificate.build(data:loadPK2())
+        def keyInfo3 = KeyInfo.build(certificate:certificate3)
+        def keyDescriptor3 = KeyDescriptor.build(keyInfo:keyInfo3, keyType:KeyTypes.signing, disabled:true)
 		
 		def ars = ArtifactResolutionService.build(index:100, active:true, approved:true, isDefault:true, binding:soap, location:UrlURI.build(uri:"https://test.example.com/ars/artifact"))
 		def ars2 = ArtifactResolutionService.build(index:101, active:true, approved:true, isDefault:false, binding:soap, location:UrlURI.build(uri:"https://test.example.com/ars/artifact2"))
@@ -512,6 +533,7 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		
 		idp.addToKeyDescriptors(keyDescriptor)
 		idp.addToKeyDescriptors(keyDescriptor2)
+        idp.addToKeyDescriptors(keyDescriptor3)
 		idp.addToContacts(contactPerson)
 		
 		idp.addToArtifactResolutionServices(ars)
@@ -606,6 +628,7 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		def ba2 =  new AttributeBase(oid:'2.5.4.4', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:sn', name:'surname', description:'Surname or family name', category:optionalCategory, specificationRequired:false).save()
 		def ba3 =  new AttributeBase(oid:'2.5.4.42', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:givenName', name:'givenName', description:'Given name of a person', category:optionalCategory, specificationRequired:false).save()
 		def ba4 =  new AttributeBase(oid:'1.3.6.1.4.1.5923.1.1.1.7', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:eduPersonEntitlement', name:'eduPersonEntitlement', description:'Member of: URI (either URL or URN) that indicates a set of rights to specific resources based on an agreement across the releavant community', category:coreCategory, specificationRequired:true).save()
+        def ba5 =  new AttributeBase(oid:'1.3.6.1.4.1.5923.1.1.1.7', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:eduPersonEntitlement', name:'eduPersonEntitlement2', description:'Member of: URI (either URL or URN) that indicates a set of rights to specific resources based on an agreement across the releavant community', category:coreCategory, specificationRequired:true).save()
 		
 		def attrService = AttributeConsumingService.build(lang:'en')
 		attrService.addToServiceNames("Test Name 1")
@@ -616,14 +639,16 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		def attr2 = new RequestedAttribute(attributeConsumingService: attrService, base:ba2, approved:true)
 		def attr3 = new RequestedAttribute(attributeConsumingService: attrService, base:ba3, approved:true)
 		def attr4 = new RequestedAttribute(attributeConsumingService: attrService, base:ba4, approved:true)
-		attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:1'))
-		attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:2'))
-		attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:3'))
+        attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:1'))
+        attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:2'))
+        attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:3'))
 
+        def attr5 = new RequestedAttribute(attributeConsumingService: attrService, base:ba5, approved:true)
 		attrService.addToRequestedAttributes(attr1)
 		attrService.addToRequestedAttributes(attr2)
 		attrService.addToRequestedAttributes(attr3)
 		attrService.addToRequestedAttributes(attr4)
+        attrService.addToRequestedAttributes(attr5) // should not appear - spec required but no values
 		
 		def sp = SPSSODescriptor.build(protocolSupportEnumerations:protocolSupportEnumerations, organization:organization, entityDescriptor:entityDescriptor, approved:true, active:true)
 		sp.addToKeyDescriptors(keyDescriptor)
@@ -652,7 +677,7 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		diff.similar()
 	}
 
-		def "Test valid SPSSODescriptor generation with no approved attributes"() {
+	def "Test valid SPSSODescriptor generation with no approved attributes"() {
 		setup:
 		setupBindings()
 		def saml2Prot = SamlURI.build(uri:'urn:oasis:names:tc:SAML:2.0:protocol')
@@ -737,6 +762,163 @@ class MetadataGenerationServiceSpec extends IntegrationSpec {
 		def diff = new Diff(expected, strippedXML)
 		diff.similar()
 	}
+
+    def "Test valid SPSSODescriptor generation with no acs name"() {
+        setup:
+        setupBindings()
+        def saml2Prot = SamlURI.build(uri:'urn:oasis:names:tc:SAML:2.0:protocol')
+        def saml1Prot = SamlURI.build(uri:'urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0')
+        def protocolSupportEnumerations = [saml1Prot, saml2Prot]
+        
+        def organization = Organization.build(active:true, approved:true, name:"Test Organization", displayName:"Test Organization Display", lang:"en", url: new UrlURI(uri:"http://example.com"))
+        def entityDescriptor = EntityDescriptor.build(organization:organization, entityID:"https://test.example.com/myuniqueID", active:true, approved:true)
+        
+        def email = MailURI.build(uri:"test@example.com")
+        def home = TelNumURI.build(uri:"(07) 1111 1111")
+        def work = TelNumURI.build(uri:"(567) 222 22222")
+        def mobile = TelNumURI.build(uri:"0413 867 208")
+        def contact = Contact.build(givenName:"Test", surname:"User", email:email, homePhone:home, workPhone:work, mobilePhone:mobile)
+        def admin = ContactType.build(name:"administrative")
+        def contactPerson = ContactPerson.build(contact:contact, type:admin)
+        
+        def certificate = Certificate.build(data:loadPK())
+        def keyInfo = KeyInfo.build(keyName:"key1", certificate:certificate)
+        def encryptionMethod = EncryptionMethod.build(algorithm:"http://www.w3.org/2001/04/xmlenc#tripledes-cbc")
+        def keyDescriptor = KeyDescriptor.build(keyInfo:keyInfo, encryptionMethod:encryptionMethod, keyType:KeyTypes.encryption)
+        
+        def certificate2 = Certificate.build(data:loadPK())
+        def keyInfo2 = KeyInfo.build(keyName:"key2", certificate:certificate)
+        def keyDescriptor2 = KeyDescriptor.build(keyInfo:keyInfo2, keyType:KeyTypes.signing)
+        
+        def ars = ArtifactResolutionService.build(index:200, active:true, approved:true, isDefault:true, binding:soap, location:new UrlURI(uri:"https://test.example.com/ars/artifact"))
+        def ars2 = ArtifactResolutionService.build(index:201, active:true, approved:true, isDefault:false, binding:soap, location:new UrlURI(uri:"https://test.example.com/ars/artifact2"))
+        
+        def slo = SingleLogoutService.build(active:true, approved:true, binding:httpPost, location:new UrlURI(uri:"https://test.example.com/slo/POST"))
+        def mnid = ManageNameIDService.build(active:true, approved:true, binding:httpRedirect, location:new UrlURI(uri:"https://test.example.com/mnid/REDIRECT"))
+        def nidf = SamlURI.build(uri:"supported:nameid:format:urn")
+        
+        def acs = AssertionConsumerService.build(index:300, active:true, approved:true, binding:httpArtifact, location:new UrlURI(uri:"https://test.example.com/acs/ART"))
+        
+        def ba1 =  new AttributeBase(oid:'2.5.4.3', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:cn', name:'commonName', description:'An individuals common name, typically their full name. This attribute should not be used in transactions where it is desirable to maintain user anonymity.', category:coreCategory, specificationRequired:false).save()
+        def ba2 =  new AttributeBase(oid:'2.5.4.4', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:sn', name:'surname', description:'Surname or family name', category:optionalCategory, specificationRequired:false).save()
+        def ba3 =  new AttributeBase(oid:'2.5.4.42', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:givenName', name:'givenName', description:'Given name of a person', category:optionalCategory, specificationRequired:false).save()
+        def ba4 =  new AttributeBase(oid:'1.3.6.1.4.1.5923.1.1.1.7', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:eduPersonEntitlement', name:'eduPersonEntitlement', description:'Member of: URI (either URL or URN) that indicates a set of rights to specific resources based on an agreement across the releavant community', category:coreCategory, specificationRequired:true).save()
+        
+        def attrService = AttributeConsumingService.build(lang:'en')
+        attrService.addToServiceDescriptions("This is a great description")
+
+        def attr1 = new RequestedAttribute(attributeConsumingService: attrService, base:ba1, isRequired:true)
+        def attr2 = new RequestedAttribute(attributeConsumingService: attrService, base:ba2)
+        def attr3 = new RequestedAttribute(attributeConsumingService: attrService, base:ba3)
+        def attr4 = new RequestedAttribute(attributeConsumingService: attrService, base:ba4)
+        attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:1'))
+        attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:2'))
+        attr4.addToValues(new AttributeValue(value:'urn:mace:test:attr:value:3'))
+
+        attrService.addToRequestedAttributes(attr1)
+        attrService.addToRequestedAttributes(attr2)
+        attrService.addToRequestedAttributes(attr3)
+        attrService.addToRequestedAttributes(attr4)
+        
+        def sp = SPSSODescriptor.build(protocolSupportEnumerations:protocolSupportEnumerations, organization:organization, entityDescriptor:entityDescriptor, approved:true, active:true)
+        sp.addToKeyDescriptors(keyDescriptor)
+        sp.addToKeyDescriptors(keyDescriptor2)
+        sp.addToContacts(contactPerson)
+        
+        sp.addToArtifactResolutionServices(ars)
+        sp.addToArtifactResolutionServices(ars2)
+        sp.addToSingleLogoutServices(slo)
+        sp.addToManageNameIDServices(mnid)
+        sp.addToNameIDFormats(nidf)
+        
+        sp.addToAssertionConsumerServices(acs)
+        sp.addToAttributeConsumingServices(attrService)
+        
+        def expected = loadExpected('testvalidspssodescriptornoservicename')
+        
+        when:
+        metadataGenerationService.spSSODescriptor(builder, false, false, true, sp)
+        def xml = writer.toString()
+        def strippedXML = xml.replace("saml:", "")  // dodgy as hell but easiest option presently as namespaces causes problems in validation
+
+        then:
+        !xml.contains('saml:Attribute')
+        def diff = new Diff(expected, strippedXML)
+        diff.similar()
+    }
+
+    def "Test valid SPSSODescriptor generation with no requested attributes"() {
+        setup:
+        setupBindings()
+        def saml2Prot = SamlURI.build(uri:'urn:oasis:names:tc:SAML:2.0:protocol')
+        def saml1Prot = SamlURI.build(uri:'urn:oasis:names:tc:SAML:1.1:protocol urn:mace:shibboleth:1.0')
+        def protocolSupportEnumerations = [saml1Prot, saml2Prot]
+        
+        def organization = Organization.build(active:true, approved:true, name:"Test Organization", displayName:"Test Organization Display", lang:"en", url: new UrlURI(uri:"http://example.com"))
+        def entityDescriptor = EntityDescriptor.build(organization:organization, entityID:"https://test.example.com/myuniqueID", active:true, approved:true)
+        
+        def email = MailURI.build(uri:"test@example.com")
+        def home = TelNumURI.build(uri:"(07) 1111 1111")
+        def work = TelNumURI.build(uri:"(567) 222 22222")
+        def mobile = TelNumURI.build(uri:"0413 867 208")
+        def contact = Contact.build(givenName:"Test", surname:"User", email:email, homePhone:home, workPhone:work, mobilePhone:mobile)
+        def admin = ContactType.build(name:"administrative")
+        def contactPerson = ContactPerson.build(contact:contact, type:admin)
+        
+        def certificate = Certificate.build(data:loadPK())
+        def keyInfo = KeyInfo.build(keyName:"key1", certificate:certificate)
+        def encryptionMethod = EncryptionMethod.build(algorithm:"http://www.w3.org/2001/04/xmlenc#tripledes-cbc")
+        def keyDescriptor = KeyDescriptor.build(keyInfo:keyInfo, encryptionMethod:encryptionMethod, keyType:KeyTypes.encryption)
+        
+        def certificate2 = Certificate.build(data:loadPK())
+        def keyInfo2 = KeyInfo.build(keyName:"key2", certificate:certificate)
+        def keyDescriptor2 = KeyDescriptor.build(keyInfo:keyInfo2, keyType:KeyTypes.signing)
+        
+        def ars = ArtifactResolutionService.build(index:200, active:true, approved:true, isDefault:true, binding:soap, location:new UrlURI(uri:"https://test.example.com/ars/artifact"))
+        def ars2 = ArtifactResolutionService.build(index:201, active:true, approved:true, isDefault:false, binding:soap, location:new UrlURI(uri:"https://test.example.com/ars/artifact2"))
+        
+        def slo = SingleLogoutService.build(active:true, approved:true, binding:httpPost, location:new UrlURI(uri:"https://test.example.com/slo/POST"))
+        def mnid = ManageNameIDService.build(active:true, approved:true, binding:httpRedirect, location:new UrlURI(uri:"https://test.example.com/mnid/REDIRECT"))
+        def nidf = SamlURI.build(uri:"supported:nameid:format:urn")
+        
+        def acs = AssertionConsumerService.build(index:300, active:true, approved:true, binding:httpArtifact, location:new UrlURI(uri:"https://test.example.com/acs/ART"))
+        
+        def ba1 =  new AttributeBase(oid:'2.5.4.3', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:cn', name:'commonName', description:'An individuals common name, typically their full name. This attribute should not be used in transactions where it is desirable to maintain user anonymity.', category:coreCategory, specificationRequired:false).save()
+        def ba2 =  new AttributeBase(oid:'2.5.4.4', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:sn', name:'surname', description:'Surname or family name', category:optionalCategory, specificationRequired:false).save()
+        def ba3 =  new AttributeBase(oid:'2.5.4.42', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:givenName', name:'givenName', description:'Given name of a person', category:optionalCategory, specificationRequired:false).save()
+        def ba4 =  new AttributeBase(oid:'1.3.6.1.4.1.5923.1.1.1.7', nameFormat: attrUri, legacyName:'urn:mace:dir:attribute-def:eduPersonEntitlement', name:'eduPersonEntitlement', description:'Member of: URI (either URL or URN) that indicates a set of rights to specific resources based on an agreement across the releavant community', category:coreCategory, specificationRequired:true).save()
+        
+        def attrService = AttributeConsumingService.build(lang:'en')
+        attrService.addToServiceNames("Test Name 1")
+        attrService.addToServiceNames("Test Name 2")
+        attrService.addToServiceDescriptions("This is a great description")
+        
+        def sp = SPSSODescriptor.build(protocolSupportEnumerations:protocolSupportEnumerations, organization:organization, entityDescriptor:entityDescriptor, approved:true, active:true)
+        sp.addToKeyDescriptors(keyDescriptor)
+        sp.addToKeyDescriptors(keyDescriptor2)
+        sp.addToContacts(contactPerson)
+        
+        sp.addToArtifactResolutionServices(ars)
+        sp.addToArtifactResolutionServices(ars2)
+        sp.addToSingleLogoutServices(slo)
+        sp.addToManageNameIDServices(mnid)
+        sp.addToNameIDFormats(nidf)
+        
+        sp.addToAssertionConsumerServices(acs)
+        sp.addToAttributeConsumingServices(attrService)
+        
+        def expected = loadExpected('testvalidspssodescriptornora')
+        
+        when:
+        metadataGenerationService.spSSODescriptor(builder, false, false, true, sp)
+        def xml = writer.toString()
+        def strippedXML = xml.replace("saml:", "")  // dodgy as hell but easiest option presently as namespaces causes problems in validation
+
+        then:
+        !xml.contains('saml:Attribute')
+        def diff = new Diff(expected, strippedXML)
+        diff.similar()
+    }
 	
 	def "Test inactive AttributeAuthorityDescriptor generation"() {
 		setup:

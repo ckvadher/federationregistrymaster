@@ -153,7 +153,7 @@ class MetadataGenerationService {
 	@Transactional(readOnly = true)
 	def entityDescriptor(builder, all, minimal, roleExtensions, entityDescriptor, schema) {
 		if(all || entityDescriptor.functioning() ) {
-			if(entityDescriptor.empty()) {
+			if(!all && entityDescriptor.empty()) {
 				log.warn "Not rendering $entityDescriptor no children nodes detected"
 			}
 			else {
@@ -213,7 +213,7 @@ class MetadataGenerationService {
 	
 	def requestedAttribute(builder, all, minimal, attr) {
 		if(all || attr.approved) {
-			if(!attr.base.specificationRequired || (attr.base.specificationRequired && attr.values.size() > 0)) {
+			if(!attr.base.specificationRequired || (attr.base.specificationRequired && attr.values?.size() > 0)) {
 				if(attr.base.nameFormat?.uri) {
 					builder.RequestedAttribute(NameFormat:attr.base.nameFormat?.uri, Name: "urn:oid:${attr.base.oid}", FriendlyName:attr.base.name, isRequired:attr.isRequired) {
 						attr.values?.sort{it?.value}.each {
